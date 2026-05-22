@@ -1,0 +1,46 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: salesdb
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d salesdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://user:password@db:5432/salesdb
+      API_KEY: ${API_KEY}
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    image: python:3.11-slim
+    working_dir: /app
+    volumes:
+      - .:/app
+    command: >
+      sh -c "pip install streamlit requests pandas --quiet &&
+             streamlit run frontend.py --server.port 8501 --server.address 0.0.0.0"
+    ports:
+      - "8501:8501"
+    environment:
+      API_BASE: http://api:8000/api/sales
+      API_KEY: ${API_KEY}
+    depends_on:
+      - api
+
+volumes:
+  postgres_data:
